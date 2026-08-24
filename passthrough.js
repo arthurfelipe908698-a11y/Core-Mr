@@ -1,27 +1,45 @@
-// Script para ativar a câmera traseira do celular (Realidade Mista / Passthrough)
+// Script refinado para ligar a câmera traseira em celulares para Realidade Mista
 document.addEventListener('DOMContentLoaded', () => {
-    navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "environment" } // Solicita a câmera traseira
-    })
+    // Tenta acessar a câmera traseira priorizando resoluções mobile
+    const constraints = {
+        video: { 
+            facingMode: { exact: "environment" } // Força a câmera traseira principal
+        }
+    };
+
+    navigator.mediaDevices.getUserMedia(constraints)
     .then((stream) => {
-        // Cria um elemento de vídeo para exibir a câmera em tempo real
-        const video = document.createElement('video');
-        video.srcObject = stream;
-        video.play();
-        
-        // Estiliza o vídeo para cobrir toda a tela e ficar no fundo (atrás da cena 3D)
-        video.style.position = 'fixed';
-        video.style.top = '0';
-        video.style.left = '0';
-        video.style.width = '100vw';
-        video.style.height = '100vh';
-        video.style.objectFit = 'cover';
-        video.style.zIndex = '-1'; 
-        
-        document.body.prepend(video);
-        console.log("Câmera traseira ativada para Realidade Mista com sucesso!");
+        iniciarVideoPassthrough(stream);
     })
     .catch((err) => {
-        console.log("Erro ao acessar a câmera (verifique as permissões do navegador): ", err);
+        console.log("Câmera 'environment' exata não encontrada, tentando modo flexível...", err);
+        // Fallback caso o celular não suporte o parâmetro exato
+        return navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+    })
+    .then((stream) => {
+        if (stream) iniciarVideoPassthrough(stream);
+    })
+    .catch((err) => {
+        console.log("Erro crítico ao acessar a câmera do celular: ", err);
     });
 });
+
+function iniciarVideoPassthrough(stream) {
+    const video = document.createElement('video');
+    video.srcObject = stream;
+    video.setAttribute('autoplay', '');
+    video.setAttribute('playsinline', '');
+    video.muted = true;
+    video.play();
+    
+    video.style.position = 'fixed';
+    video.style.top = '0';
+    video.style.left = '0';
+    video.style.width = '100vw';
+    video.style.height = '100vh';
+    video.style.objectFit = 'cover';
+    video.style.zIndex = '-10'; // Mantém estritamente atrás de tudo do A-Frame
+    
+    document.body.prepend(video);
+    console.log("Passthrough (Realidade Mista) ativado com sucesso!");
+}
