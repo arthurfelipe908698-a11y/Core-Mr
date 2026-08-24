@@ -22,30 +22,22 @@
     </style>
 </head>
 <body>
-    <!-- Ativa o modo WebXR exigindo recursos de mãos e floor-space -->
-    <a-scene webxr="requiredFeatures: hit-test, local-floor; optionalFeatures: hand-tracking, dom-overlay; overlayElement: #overlay;" vr-mode-ui="enabled: true">
+    <!-- Configurado para WebXR com suporte a Hand Tracking -->
+    <a-scene webxr="requiredFeatures: hit-test, local-floor; optionalFeatures: hand-tracking;" vr-mode-ui="enabled: true">
         
-        <!-- Câmera e Controladores de Mão WebXR -->
+        <!-- Câmera (Sem mira e sem cubo na tela) -->
         <a-entity id="rig">
-            <a-camera position="0 1.6 0">
-                <a-cursor raycaster="objects: [hand-interactive]" fuse="false"></a-cursor>
-            </a-camera>
+            <a-camera position="0 1.6 0"></a-camera>
             
-            <!-- Mão Esquerda e Direita com rastreamento real via WebXR -->
+            <!-- Mãos com esqueleto visível (Mesh) -->
             <a-entity id="leftHand" hand-tracking-controls="hand: left; modelStyle: mesh;"></a-entity>
             <a-entity id="rightHand" hand-tracking-controls="hand: right; modelStyle: mesh;"></a-entity>
         </a-entity>
 
-        <!-- Objeto 3D Interativo (Cubo Principal) -->
-        <a-box id="cuboPrincipal" position="0 1.5 -1.2" rotation="0 45 45" color="#4CC3D9" shadow 
-               hand-interactive
-               animation="property: rotation; to: 360 360 0; loop: true; dur: 10000">
-        </a-box>
-
-        <!-- Interface Flutuante (HUD) -->
+        <!-- Apenas a Interface Flutuante (HUD) de botões persiste na cena -->
         <a-entity position="0 1.6 -1.2">
             <a-plane width="1.0" height="0.5" color="#000000" opacity="0.6" position="0 0 0"></a-plane>
-            <a-text value="Hand Tracking Ativo" align="center" position="0 0.15 0.01" scale="0.4 0.4 0.4" color="#FFF"></a-text>
+            <a-text value="Hand Tracking Visivel" align="center" position="0 0.15 0.01" scale="0.4 0.4 0.4" color="#FFF"></a-text>
             
             <!-- Botão Cor -->
             <a-box id="btnMudarCor" position="-0.25 -0.08 0.02" width="0.35" height="0.12" depth="0.05" color="#4CC3D9" hand-interactive>
@@ -58,23 +50,35 @@
             </a-box>
         </a-entity>
 
-        <!-- Iluminação e Ambiente -->
+        <!-- Iluminação -->
         <a-light type="ambient" color="#BBB"></a-light>
         <a-light type="directional" color="#FFF" intensity="0.6" position="-0.5 1 1"></a-light>
     </a-scene>
 
     <script>
-        // Remove avisos de 3DoF
+        // Força a remoção de avisos do navegador e pinta o esqueleto das mãos de branco assim que carregarem
         setInterval(() => {
             document.querySelectorAll('.a-modal, div[id^="aframe-"]:not(canvas)').forEach(el => {
                 if(el.innerText && (el.innerText.includes('3DoF') || el.innerText.includes('Continuar'))) {
                     el.style.display = 'none';
                 }
             });
+
+            // Deixa o modelo das mãos com a cor branca visível
+            ['leftHand', 'rightHand'].forEach(id => {
+                const hand = document.querySelector('#' + id);
+                if (hand && hand.object3D) {
+                    hand.object3D.traverse((node) => {
+                        if (node.isMesh && node.material) {
+                            node.material.color.set('#FFFFFF'); // Branco visível
+                        }
+                    });
+                }
+            });
         }, 500);
     </script>
 
-    <!-- Scripts atualizados -->
+    <!-- Scripts originais mantidos -->
     <script src="interaction.js"></script>
     <script src="passthrough.js"></script>
 </body>
