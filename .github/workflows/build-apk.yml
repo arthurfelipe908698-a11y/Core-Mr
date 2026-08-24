@@ -1,64 +1,72 @@
-name: Build APK from VR-BOX-MR ZIP
+name: Build APK - Core MR
 
 on:
   workflow_dispatch:
   push:
-    paths:
-      - "VR-BOX-MR-1MB-CADA.zip"
-      - ".github/workflows/build-apk.yml"
+    branches:
+      - main
 
 permissions:
   contents: read
 
 jobs:
-  build-apk:
+  build:
+    name: Build Core MR APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Baixar o repositório
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Preparar Java 17
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Preparar Gradle 8.9
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
 
-      - name: Verificar ZIP
+      - name: Check ZIP
         shell: bash
         run: |
           set -e
+          echo "Arquivos do repositório:"
+          ls -lah
+
           if [ ! -f "VR-BOX-MR-1MB-CADA.zip" ]; then
-            echo "ERRO: VR-BOX-MR-1MB-CADA.zip não foi encontrado na raiz do repositório."
+            echo "::error::VR-BOX-MR-1MB-CADA.zip não encontrado."
             exit 1
           fi
-          unzip -l "VR-BOX-MR-1MB-CADA.zip"
 
-      - name: Extrair o projeto web
+          echo "ZIP encontrado:"
+          ls -lh "VR-BOX-MR-1MB-CADA.zip"
+
+      - name: Extract ZIP
         shell: bash
         run: |
           set -e
-          rm -rf extracted
-          mkdir extracted
-          unzip -q "VR-BOX-MR-1MB-CADA.zip" -d extracted
+          rm -rf project
+          mkdir -p project
 
-          SOURCE="extracted/VR-BOX-MR"
+          unzip -q "VR-BOX-MR-1MB-CADA.zip" -d project
 
-          if [ ! -f "$SOURCE/index.html" ]; then
-            echo "ERRO: index.html não foi encontrado dentro de VR-BOX-MR-1MB-CADA.zip."
-            find extracted -maxdepth 3 -type f | sort
+          echo "Conteúdo extraído:"
+          find project -maxdepth 4 -type f | sort
+
+          INDEX=$(find project -type f -iname "index.html" | head -n 1)
+
+          if [ -z "$INDEX" ]; then
+            echo "::error::Nenhum index.html foi encontrado dentro do ZIP."
             exit 1
           fi
 
-          echo "Arquivos encontrados:"
-          find "$SOURCE" -maxdepth 1 -type f -printf '%f\n' | sort
+          echo "INDEX=$INDEX" >> "$GITHUB_ENV"
+          echo "index.html encontrado em: $INDEX"
 
-      - name: Criar projeto Android
+      - name: Create Android project
         shell: bash
         run: |
           set -e
@@ -110,17 +118,18 @@ jobs:
               compileSdk 35
 
               defaultConfig {
-                  applicationId "com.coremr.app"
+                  applicationId 'com.coremr.app'
                   minSdk 23
                   targetSdk 35
                   versionCode 1
-                  versionName "1.0"
+                  versionName '1.0'
               }
 
               buildTypes {
                   debug {
                       minifyEnabled false
                   }
+
                   release {
                       minifyEnabled false
                       shrinkResources false
@@ -136,7 +145,8 @@ jobs:
           cat > app/src/main/res/values/styles.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
-              <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+              <style name="AppTheme"
+                  parent="android:style/Theme.Material.Light.NoActionBar">
                   <item name="android:fontFamily">sans</item>
                   <item name="android:windowFullscreen">true</item>
                   <item name="android:windowActionModeOverlay">true</item>
@@ -188,6 +198,7 @@ jobs:
           import android.webkit.PermissionRequest;
           import android.webkit.WebChromeClient;
           import android.webkit.WebResourceRequest;
+          import android.webkit.WebResourceResponse;
           import android.webkit.WebSettings;
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
@@ -197,27 +208,26 @@ jobs:
 
           public class MainActivity extends Activity {
 
-              private static final int CAMERA_PERMISSION = 100;
+              private static final int CAMERA_REQUEST = 100;
               private WebView webView;
               private WebViewAssetLoader assetLoader;
 
               @Override
-              protected void onCreate(@Nullable Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
+              protected void onCreate(@Nullable Bundle state) {
+                  super.onCreate(state);
 
                   hideSystemUi();
 
                   if (android.os.Build.VERSION.SDK_INT >= 23 &&
                       checkSelfPermission(Manifest.permission.CAMERA)
                           != PackageManager.PERMISSION_GRANTED) {
-
                       requestPermissions(
                           new String[]{Manifest.permission.CAMERA},
-                          CAMERA_PERMISSION
+                          CAMERA_REQUEST
                       );
                   }
 
-                  createWebView();
+                  setupWebView();
               }
 
               private void hideSystemUi() {
@@ -231,7 +241,7 @@ jobs:
                   );
               }
 
-              private void createWebView() {
+              private void setupWebView() {
                   webView = new WebView(this);
                   setContentView(webView);
 
@@ -242,22 +252,24 @@ jobs:
                       )
                       .build();
 
-                  WebSettings settings = webView.getSettings();
-                  settings.setJavaScriptEnabled(true);
-                  settings.setDomStorageEnabled(true);
-                  settings.setDatabaseEnabled(true);
-                  settings.setAllowFileAccess(false);
-                  settings.setAllowContentAccess(true);
-                  settings.setMediaPlaybackRequiresUserGesture(false);
-                  settings.setJavaScriptCanOpenWindowsAutomatically(true);
-                  settings.setSupportZoom(false);
+                  WebSettings s = webView.getSettings();
+                  s.setJavaScriptEnabled(true);
+                  s.setDomStorageEnabled(true);
+                  s.setDatabaseEnabled(true);
+                  s.setAllowFileAccess(false);
+                  s.setAllowContentAccess(true);
+                  s.setMediaPlaybackRequiresUserGesture(false);
+                  s.setJavaScriptCanOpenWindowsAutomatically(true);
+                  s.setSupportZoom(false);
 
                   webView.setWebViewClient(new WebViewClient() {
                       @Override
-                      public android.webkit.WebResourceResponse shouldInterceptRequest(
+                      public WebResourceResponse shouldInterceptRequest(
                           WebView view,
                           WebResourceRequest request) {
-                          return assetLoader.shouldInterceptRequest(request.getUrl());
+                          return assetLoader.shouldInterceptRequest(
+                              request.getUrl()
+                          );
                       }
                   });
 
@@ -266,7 +278,9 @@ jobs:
                       public void onPermissionRequest(
                           final PermissionRequest request) {
                           runOnUiThread(() -> {
-                              request.grant(request.getResources());
+                              if (request != null) {
+                                  request.grant(request.getResources());
+                              }
                           });
                       }
                   });
@@ -298,24 +312,60 @@ jobs:
           }
           EOF
 
-          SOURCE="extracted/VR-BOX-MR"
-
-          # Copia exatamente os arquivos que estavam dentro do ZIP.
-          cp -R "$SOURCE"/. app/src/main/assets/
-
-          echo "Assets do APK:"
-          find app/src/main/assets -maxdepth 1 -type f -printf '%f\n' | sort
-
-      - name: Compilar APK
+      - name: Copy ZIP files into APK
         shell: bash
         run: |
           set -e
+
+          INDEX="$INDEX"
+          SOURCE_DIR="$(dirname "$INDEX")"
+
+          echo "Copiando projeto web de:"
+          echo "$SOURCE_DIR"
+
+          cp -R "$SOURCE_DIR"/. app/src/main/assets/
+
+          if [ ! -f app/src/main/assets/index.html ]; then
+            echo "::error::index.html não foi copiado para os assets."
+            exit 1
+          fi
+
+          echo "Assets finais:"
+          find app/src/main/assets -maxdepth 2 -type f | sort
+
+      - name: Build debug APK
+        shell: bash
+        run: |
+          set -e
+
           gradle :app:assembleDebug --no-daemon --stacktrace
 
-      - name: Publicar APK
+          echo "===== APKs GERADOS ====="
+          find . -type f -name "*.apk" -print
+
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+
+          if [ ! -f "$APK" ]; then
+            echo "::error::O APK não foi encontrado em $APK"
+            exit 1
+          fi
+
+          echo "APK encontrado:"
+          ls -lh "$APK"
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Core-Mr-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload APK com nome fácil
+        uses: actions/upload-artifact@v4
+        with:
+          name: Core-Mr-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
           
