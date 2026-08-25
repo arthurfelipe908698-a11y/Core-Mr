@@ -1,0 +1,59 @@
+name: Build Core MR
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Core MR - APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+
+      - name: Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Configurar Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Verificar projeto
+        run: |
+          echo "Arquivos do projeto:"
+          find . -maxdepth 4 -type f | sort
+
+      - name: Compilar APK
+        run: |
+          gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Verificar APK
+        run: |
+          echo "Procurando APK..."
+          find app/build/outputs -type f -name "*.apk" -print
+
+          if [ ! -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
+            echo "ERRO: APK não foi criado."
+            exit 1
+          fi
+
+          ls -lh app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publicar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Core-MR-Mixed-Reality-HandTracking
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
