@@ -1,4 +1,4 @@
-name: CORE MR - Android Build
+name: CORE MR - Android APK
 
 on:
   push:
@@ -16,33 +16,43 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      # ------------------------------------------------------
-      # 1. Baixar o projeto
-      # ------------------------------------------------------
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
-      # ------------------------------------------------------
-      # 2. Cache da Library do Unity
-      # ------------------------------------------------------
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check Unity project
+        shell: bash
+        run: |
+          echo "Verificando projeto Unity..."
+
+          if [ ! -f "ProjectSettings/ProjectVersion.txt" ]; then
+            echo "ERRO: ProjectSettings/ProjectVersion.txt não encontrado."
+            echo ""
+            echo "Este repositório precisa conter um projeto Unity completo."
+            echo "Crie/adicione:"
+            echo "  ProjectSettings/ProjectVersion.txt"
+            echo "  ProjectSettings/ProjectSettings.asset"
+            echo "  Packages/manifest.json"
+            exit 1
+          fi
+
+          echo "Projeto Unity encontrado."
+
+          echo "Versão do Unity:"
+          cat ProjectSettings/ProjectVersion.txt
+
       - name: Cache Unity Library
         uses: actions/cache@v4
         with:
           path: Library
           key: >-
-            Library-Android-${{ hashFiles(
+            unity-library-android-${{ hashFiles(
               'ProjectSettings/ProjectVersion.txt',
               'Packages/manifest.json'
             ) }}
           restore-keys: |
-            Library-Android-
-            Library-
+            unity-library-android-
 
-      # ------------------------------------------------------
-      # 3. Compilar projeto Unity para Android
-      # ------------------------------------------------------
       - name: Build Android APK
         uses: game-ci/unity-builder@v4
         env:
@@ -53,19 +63,14 @@ jobs:
         with:
           targetPlatform: Android
 
-          # Executa Assets/Editor/AndroidBuild.cs
+          androidExportType: androidPackage
+
           buildMethod: CoreMR.Editor.AndroidBuild.Build
 
-          # APK
-          androidExportType: androidPackage
-          androidRelease: false
-
-          # Não alterar automaticamente a versão
           versioning: None
 
-      # ------------------------------------------------------
-      # 4. Verificar APK gerado
-      # ------------------------------------------------------
+          allowDirtyBuild: true
+
       - name: Verify APK
         shell: bash
         run: |
@@ -76,22 +81,19 @@ jobs:
             -name "*.apk" \
             -print
 
-          if ! find . -type f -name "*.apk" | grep -q ".apk"; then
-            echo "ERRO: nenhum APK foi encontrado."
+          APK_COUNT=$(find . -type f -name "*.apk" | wc -l)
+
+          if [ "$APK_COUNT" -eq 0 ]; then
+            echo "ERRO: APK não foi gerado."
             exit 1
           fi
 
-          echo "APK encontrado com sucesso."
+          echo "APK encontrado."
 
-      # ------------------------------------------------------
-      # 5. Publicar APK como Artifact
-      # ------------------------------------------------------
-      - name: Upload CORE MR APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: CORE-MR-Android-${{ github.run_number }}
-          path: |
-            Builds/Android/*.apk
-            build/**/*.apk
+          name: CORE-MR-APK-${{ github.run_number }}
+          path: "**/*.apk"
           if-no-files-found: error
           retention-days: 14
