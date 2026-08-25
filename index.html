@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VR Box Engine From Scratch</title>
+    <title>VR Box Engine - Com Giroscópio</title>
     <style>
         body, html {
             margin: 0;
@@ -18,9 +18,25 @@
             height: 100%;
             display: block;
         }
+        #btn-permissao {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px;
+            background: #ff5722;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 999;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
+    <button id="btn-permissao" onclick="ativarVR()">Ativar Giroscópio VR</button>
     <canvas id="glCanvas"></canvas>
 
     <script>
@@ -31,7 +47,38 @@
             alert('WebGL não suportado!');
         }
 
-        // Shaders básicos (Vertex e Fragment)
+        // Variáveis de rotação baseadas no giroscópio do celular
+        let rotX = 0;
+        let rotY = 0;
+        let rotZ = 0;
+
+        function ativarVR() {
+            // Em celulares modernos (Android/iOS), é preciso pedir permissão para usar os sensores
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(response => {
+                        if (response === 'granted') {
+                            window.addEventListener('deviceorientation', handleOrientation, true);
+                            document.getElementById('btn-permissao').style.display = 'none';
+                        } else {
+                            alert("Permissão negada para o sensor.");
+                        }
+                    }).catch(console.error);
+            } else {
+                window.addEventListener('deviceorientation', handleOrientation, true);
+                document.getElementById('btn-permissao').style.display = 'none';
+            }
+        }
+
+        function handleOrientation(event) {
+            // Beta: inclinação para frente/trás (-180 a 180)
+            // Gamma: inclinação para esquerda/direita (-90 a 90)
+            // Alpha: bússola (0 a 360)
+            rotX = event.beta ? event.beta * (Math.PI / 180) : 0;
+            rotY = event.gamma ? event.gamma * (Math.PI / 180) : 0;
+            rotZ = event.alpha ? event.alpha * (Math.PI / 180) : 0;
+        }
+
         const vsSource = `
             attribute vec3 aPosition;
             attribute vec3 aColor;
@@ -52,7 +99,6 @@
             }
         `;
 
-        // Função auxiliar para compilar shaders
         function createShader(gl, type, source) {
             const shader = gl.createShader(type);
             gl.shaderSource(shader, source);
@@ -66,7 +112,6 @@
         gl.linkProgram(shaderProgram);
         gl.useProgram(shaderProgram);
 
-        // Geometria de um cubo simples
         const positions = [
             -0.5, -0.5,  0.5,   0.5, -0.5,  0.5,   0.5,  0.5,  0.5,  -0.5,  0.5,  0.5,
             -0.5, -0.5, -0.5,  -0.5,  0.5, -0.5,   0.5,  0.5, -0.5,   0.5, -0.5, -0.5,
@@ -98,10 +143,7 @@
         const uMVLoc = gl.getUniformLocation(shaderProgram, "uModelViewMatrix");
         const uProjLoc = gl.getUniformLocation(shaderProgram, "uProjectionMatrix");
 
-        let angle = 0;
-
         function render() {
-            // Ajusta o tamanho do canvas para a tela real do celular
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
 
@@ -109,22 +151,23 @@
             gl.clearColor(0.0, 0.0, 0.0, 1.0);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-            angle += 0.02;
-
-            // Renderiza duas vezes (Side-by-Side: Olho Esquerdo e Olho Direito)
             const halfWidth = canvas.width / 2;
             const height = canvas.height;
 
             for (let i = 0; i < 2; i++) {
-                // Divide a viewport: i=0 (esquerda), i=1 (direita)
                 gl.viewport(i * halfWidth, 0, halfWidth, height);
 
-                // Matrizes simples de projeção e rotação (manual)
                 let proj = [2,0,0,0, 0,2,0,0, 0,0,-1,-1, 0,0,-2,0];
+
+                // Multiplicando as rotações do cubo com base nos ângulos do giroscópio (rotX, rotY)
+                let cX = Math.cos(rotX), sX = Math.sin(rotX);
+                let cY = Math.cos(rotY), sY = Math.sin(rotY);
+
+                // Matriz de rotação 3D combinada
                 let mv = [
-                    Math.cos(angle), 0, Math.sin(angle), 0,
-                    0, 1, 0, 0,
-                    -Math.sin(angle), 0, Math.cos(angle), 0,
+                    cY, 0, sY, 0,
+                    sX * sY, cX, -sX * cY, 0,
+                    -cX * sY, sX, cX * cY, 0,
                     0, 0, -3, 1
                 ];
 
