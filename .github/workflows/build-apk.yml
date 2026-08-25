@@ -1,0 +1,97 @@
+name: CORE MR - Android Build
+
+on:
+  push:
+    branches:
+      - "**"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    name: Build CORE MR APK
+    runs-on: ubuntu-22.04
+
+    steps:
+      # ------------------------------------------------------
+      # 1. Baixar o projeto
+      # ------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # ------------------------------------------------------
+      # 2. Cache da Library do Unity
+      # ------------------------------------------------------
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: >-
+            Library-Android-${{ hashFiles(
+              'ProjectSettings/ProjectVersion.txt',
+              'Packages/manifest.json'
+            ) }}
+          restore-keys: |
+            Library-Android-
+            Library-
+
+      # ------------------------------------------------------
+      # 3. Compilar projeto Unity para Android
+      # ------------------------------------------------------
+      - name: Build Android APK
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+
+        with:
+          targetPlatform: Android
+
+          # Executa Assets/Editor/AndroidBuild.cs
+          buildMethod: CoreMR.Editor.AndroidBuild.Build
+
+          # APK
+          androidExportType: androidPackage
+          androidRelease: false
+
+          # Não alterar automaticamente a versão
+          versioning: None
+
+      # ------------------------------------------------------
+      # 4. Verificar APK gerado
+      # ------------------------------------------------------
+      - name: Verify APK
+        shell: bash
+        run: |
+          echo "Procurando APK..."
+
+          find . \
+            -type f \
+            -name "*.apk" \
+            -print
+
+          if ! find . -type f -name "*.apk" | grep -q ".apk"; then
+            echo "ERRO: nenhum APK foi encontrado."
+            exit 1
+          fi
+
+          echo "APK encontrado com sucesso."
+
+      # ------------------------------------------------------
+      # 5. Publicar APK como Artifact
+      # ------------------------------------------------------
+      - name: Upload CORE MR APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: CORE-MR-Android-${{ github.run_number }}
+          path: |
+            Builds/Android/*.apk
+            build/**/*.apk
+          if-no-files-found: error
+          retention-days: 14
