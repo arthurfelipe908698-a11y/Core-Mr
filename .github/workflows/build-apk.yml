@@ -11,36 +11,88 @@ permissions:
 
 jobs:
   build:
+    name: Build Core MR
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Baixar repositório
         uses: actions/checkout@v4
 
-      - name: Java 17
+      - name: Configurar Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Gradle 8.9
+      - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
 
-      - name: Build APK
-        run: gradle :app:assembleDebug --no-daemon --stacktrace
-
-      - name: Verify APK
+      - name: Encontrar projeto Android
+        shell: bash
         run: |
-          test -f app/build/outputs/apk/debug/app-debug.apk
-          ls -lh app/build/outputs/apk/debug/app-debug.apk
+          set -e
 
-      - name: Upload APK
+          if [ -f "settings.gradle" ] || [ -f "settings.gradle.kts" ]; then
+            echo "Projeto Android já está na raiz."
+            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          ZIP=$(find . -maxdepth 1 -type f -iname "*.zip" | head -n 1)
+
+          if [ -z "$ZIP" ]; then
+            echo "::error::Nenhum projeto Gradle ou ZIP encontrado."
+            ls -la
+            exit 1
+          fi
+
+          echo "ZIP encontrado: $ZIP"
+          rm -rf extracted
+          mkdir extracted
+          unzip -q "$ZIP" -d extracted
+
+          SETTINGS=$(find extracted -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
+
+          if [ -z "$SETTINGS" ]; then
+            echo "::error::O ZIP não contém settings.gradle."
+            find extracted -maxdepth 5 -type f | sort
+            exit 1
+          fi
+
+          PROJECT_DIR="$(dirname "$SETTINGS")"
+          echo "Projeto encontrado em: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Compilar APK
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+          gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Verificar APK
+        shell: bash
+        run: |
+          set -e
+          APK=$(find "$PROJECT_DIR/app/build/outputs" -type f -name "*.apk" | head -n 1)
+
+          if [ -z "$APK" ]; then
+            echo "::error::APK não foi gerado."
+            find "$PROJECT_DIR" -type f -name "*.apk" -print
+            exit 1
+          fi
+
+          mkdir -p "$GITHUB_WORKSPACE/final-apk"
+          cp "$APK" "$GITHUB_WORKSPACE/final-apk/Core-MR.apk"
+          ls -lh "$GITHUB_WORKSPACE/final-apk/Core-MR.apk"
+
+      - name: Disponibilizar APK
         uses: actions/upload-artifact@v4
         with:
           name: Core-MR-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: final-apk/Core-MR.apk
           if-no-files-found: error
           retention-days: 14
           
