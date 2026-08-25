@@ -1,59 +1,68 @@
-name: Build Core MR
+name: Core MR APK
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
 permissions:
   contents: read
 
 jobs:
-  build:
-    name: Core MR - APK
+  android:
+    name: Build Core MR
     runs-on: ubuntu-latest
 
     steps:
-      - name: Baixar projeto
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configurar Java 17
+      - name: Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Configurar Gradle 8.9
+      - name: Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
 
-      - name: Verificar projeto
+      - name: Verificar arquivos
+        shell: bash
         run: |
-          echo "Arquivos do projeto:"
-          find . -maxdepth 4 -type f | sort
+          set -e
+          echo "Projeto:"
+          find app -maxdepth 5 -type f | sort
+
+          test -f app/build.gradle
+          test -f app/src/main/AndroidManifest.xml
+          test -f app/src/main/assets/index.html
 
       - name: Compilar APK
+        shell: bash
         run: |
+          set -e
           gradle :app:assembleDebug --no-daemon --stacktrace
 
-      - name: Verificar APK
+      - name: Confirmar APK
+        shell: bash
         run: |
-          echo "Procurando APK..."
-          find app/build/outputs -type f -name "*.apk" -print
+          set -e
+          APK="app/build/outputs/apk/debug/app-debug.apk"
 
-          if [ ! -f "app/build/outputs/apk/debug/app-debug.apk" ]; then
-            echo "ERRO: APK não foi criado."
+          if [ ! -f "$APK" ]; then
+            echo "::error::APK não foi gerado."
+            find . -type f -name "*.apk" -print
             exit 1
           fi
 
-          ls -lh app/build/outputs/apk/debug/app-debug.apk
+          echo "APK pronto:"
+          ls -lh "$APK"
 
-      - name: Publicar APK
+      - name: Disponibilizar APK
         uses: actions/upload-artifact@v4
         with:
-          name: Core-MR-Mixed-Reality-HandTracking
+          name: Core-MR-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+          
