@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VR Box Engine From Scratch</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="glCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('glCanvas');
+        const gl = canvas.getContext('webgl');
+
+        if (!gl) {
+            alert('WebGL não suportado!');
+        }
+
+        // Shaders básicos (Vertex e Fragment)
+        const vsSource = `
+            attribute vec3 aPosition;
+            attribute vec3 aColor;
+            uniform mat4 uModelViewMatrix;
+            uniform mat4 uProjectionMatrix;
+            varying vec3 vColor;
+            void main() {
+                gl_Position = uProjectionMatrix * uModelViewMatrix * vec4(aPosition, 1.0);
+                vColor = aColor;
+            }
+        `;
+
+        const fsSource = `
+            precision mediump float;
+            varying vec3 vColor;
+            void main() {
+                gl_FragColor = vec4(vColor, 1.0);
+            }
+        `;
+
+        // Função auxiliar para compilar shaders
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            return shader;
+        }
+
+        const shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, createShader(gl, gl.VERTEX_SHADER, vsSource));
+        gl.attachShader(shaderProgram, createShader(gl, gl.FRAGMENT_SHADER, fsSource));
+        gl.linkProgram(shaderProgram);
+        gl.useProgram(shaderProgram);
+
+        // Geometria de um cubo simples
+        const positions = [
+            -0.5, -0.5,  0.5,   0.5, -0.5,  0.5,   0.5,  0.5,  0.5,  -0.5,  0.5,  0.5,
+            -0.5, -0.5, -0.5,  -0.5,  0.5, -0.5,   0.5,  0.5, -0.5,   0.5, -0.5, -0.5,
+        ];
+        const colors = [
+            1,0,0,  0,1,0,  0,0,1,  1,1,0,
+            1,0,1,  0,1,1,  1,1,1,  0,0,0,
+        ];
+        const indices = [
+            0,1,2, 0,2,3, 4,5,6, 4,6,7,
+            3,2,6, 3,6,5, 0,4,7, 0,7,1,
+            1,7,6, 1,6,2, 0,3,5, 0,5,4
+        ];
+
+        const posBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+
+        const colBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, colBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
+
+        const indexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+
+        const aPosLoc = gl.getAttribLocation(shaderProgram, "aPosition");
+        const aColLoc = gl.getAttribLocation(shaderProgram, "aColor");
+        const uMVLoc = gl.getUniformLocation(shaderProgram, "uModelViewMatrix");
+        const uProjLoc = gl.getUniformLocation(shaderProgram, "uProjectionMatrix");
+
+        let angle = 0;
+
+        function render() {
+            // Ajusta o tamanho do canvas para a tela real do celular
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            gl.enable(gl.DEPTH_TEST);
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            angle += 0.02;
+
+            // Renderiza duas vezes (Side-by-Side: Olho Esquerdo e Olho Direito)
+            const halfWidth = canvas.width / 2;
+            const height = canvas.height;
+
+            for (let i = 0; i < 2; i++) {
+                // Divide a viewport: i=0 (esquerda), i=1 (direita)
+                gl.viewport(i * halfWidth, 0, halfWidth, height);
+
+                // Matrizes simples de projeção e rotação (manual)
+                let proj = [2,0,0,0, 0,2,0,0, 0,0,-1,-1, 0,0,-2,0];
+                let mv = [
+                    Math.cos(angle), 0, Math.sin(angle), 0,
+                    0, 1, 0, 0,
+                    -Math.sin(angle), 0, Math.cos(angle), 0,
+                    0, 0, -3, 1
+                ];
+
+                gl.uniformMatrix4fv(uProjLoc, false, new Float32Array(proj));
+                gl.uniformMatrix4fv(uMVLoc, false, new Float32Array(mv));
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+                gl.enableVertexAttribArray(aPosLoc);
+                gl.vertexAttribPointer(aPosLoc, 3, gl.FLOAT, false, 0, 0);
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, colBuffer);
+                gl.enableVertexAttribArray(aColLoc);
+                gl.vertexAttribPointer(aColLoc, 3, gl.FLOAT, false, 0, 0);
+
+                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+                gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
+            }
+
+            requestAnimationFrame(render);
+        }
+
+        render();
+    </script>
+</body>
+</html>
